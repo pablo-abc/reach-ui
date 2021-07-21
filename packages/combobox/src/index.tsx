@@ -292,6 +292,9 @@ export const Combobox = React.forwardRef(function Combobox(
 
   const persistSelectionRef = React.useRef(false);
 
+  // We keep a ref to know if the user has focus in <ComboboxInput />
+  const isFocusedRef = React.useRef(false);
+
   const defaultData: StateData = {
     // The value the user has typed. We derive this also when the developer is
     // controlling the value of ComboboxInput.
@@ -327,6 +330,7 @@ export const Combobox = React.forwardRef(function Combobox(
     popoverRef,
     state,
     transition,
+    isFocusedRef,
   };
 
   useCheckStyles("combobox");
@@ -426,13 +430,6 @@ export const ComboboxInput = React.forwardRef(function ComboboxInput(
   },
   forwardedRef
 ) {
-  // https://github.com/reach/reach-ui/issues/464
-  let { current: initialControlledValue } = React.useRef(controlledValue);
-  let controlledValueChangedRef = React.useRef(false);
-  useUpdateEffect(() => {
-    controlledValueChangedRef.current = true;
-  }, [controlledValue]);
-
   let {
     data: { navigationValue, value, lastEventType },
     inputRef,
@@ -445,6 +442,9 @@ export const ComboboxInput = React.forwardRef(function ComboboxInput(
     ariaLabel,
     ariaLabelledby,
     persistSelectionRef,
+    // https://github.com/reach/reach-ui/issues/464
+    // https://github.com/reach/reach-ui/issues/755
+    isFocusedRef,
   } = React.useContext(ComboboxContext);
 
   let ref = useComposedRefs(inputRef, forwardedRef);
@@ -470,16 +470,13 @@ export const ComboboxInput = React.forwardRef(function ComboboxInput(
     (value: ComboboxValue) => {
       if (value.trim() === "") {
         transition(CLEAR);
-      } else if (
-        value === initialControlledValue &&
-        !controlledValueChangedRef.current
-      ) {
+      } else if (!isFocusedRef.current) {
         transition(INITIAL_CHANGE, { value });
       } else {
         transition(CHANGE, { value });
       }
     },
-    [initialControlledValue, transition]
+    [transition, isFocusedRef]
   );
 
   React.useEffect(() => {
@@ -507,6 +504,7 @@ export const ComboboxInput = React.forwardRef(function ComboboxInput(
   }
 
   function handleFocus() {
+    isFocusedRef.current = true;
     if (selectOnClick) {
       selectOnClickRef.current = true;
     }
@@ -626,9 +624,8 @@ export const ComboboxPopover = React.forwardRef(function ComboboxPopover(
   },
   forwardedRef
 ) {
-  const { popoverRef, inputRef, isExpanded, state } = React.useContext(
-    ComboboxContext
-  );
+  const { popoverRef, inputRef, isExpanded, state } =
+    React.useContext(ComboboxContext);
   const ref = useComposedRefs(popoverRef, forwardedRef);
   const handleKeyDown = useKeyDown();
   const handleBlur = useBlur();
@@ -912,13 +909,8 @@ export const ComboboxButton = React.forwardRef(function ComboboxButton(
   { as: Comp = "button", onClick, onKeyDown, ...props },
   forwardedRef
 ) {
-  const {
-    transition,
-    state,
-    buttonRef,
-    listboxId,
-    isExpanded,
-  } = React.useContext(ComboboxContext);
+  const { transition, state, buttonRef, listboxId, isExpanded } =
+    React.useContext(ComboboxContext);
   const ref = useComposedRefs(buttonRef, forwardedRef);
 
   const handleKeyDown = useKeyDown();
@@ -1130,19 +1122,15 @@ function useKeyDown() {
 }
 
 function useBlur() {
-  const {
-    state,
-    transition,
-    popoverRef,
-    inputRef,
-    buttonRef,
-  } = React.useContext(ComboboxContext);
+  const { state, transition, popoverRef, inputRef, buttonRef, isFocusedRef } =
+    React.useContext(ComboboxContext);
 
   return function handleBlur(event: React.FocusEvent) {
     let popover = popoverRef.current;
     let input = inputRef.current;
     let button = buttonRef.current;
     let activeElement = event.relatedTarget as Node;
+    isFocusedRef.current = false;
 
     // we on want to close only if focus propss outside the combobox
     if (activeElement !== input && activeElement !== button && popover) {
@@ -1249,9 +1237,8 @@ export function escapeRegexp(str: string) {
  * @see Docs https://reach.tech/combobox#usecomboboxcontext
  */
 export function useComboboxContext(): ComboboxContextValue {
-  let { isExpanded, comboboxId, data, state } = React.useContext(
-    ComboboxContext
-  );
+  let { isExpanded, comboboxId, data, state } =
+    React.useContext(ComboboxContext);
   let { navigationValue } = data;
   return React.useMemo(
     () => ({
@@ -1320,6 +1307,7 @@ interface InternalComboboxContextValue {
   popoverRef: React.MutableRefObject<HTMLElement | undefined>;
   state: State;
   transition: Transition;
+  isFocusedRef: React.MutableRefObject<boolean>;
 }
 
 type Transition = (event: MachineEventType, payload?: any) => any;
